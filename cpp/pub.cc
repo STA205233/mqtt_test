@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
   std::string host = argv[1];
   int port = std::atoi(argv[2]);
   int i = 0;
-  MosquittoIO mosq("test", host, port);
+  MosquittoIO mosq("test_pub", host, port);
   mosq.Connect();
   mosq.loop_start();
   while (true) {

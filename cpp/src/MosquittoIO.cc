@@ -29,10 +29,27 @@ void MosquittoIO::on_publish(int mid) {
   std::cout << "Published message with id: " << mid << std::endl;
 }
 void MosquittoIO::on_message(const struct mosquitto_message *message) {
-  std::cout << "Received message: " << message->payload << std::endl;
+  std::shared_ptr<mqtt::mosquitto_message> m_sptr = std::make_shared<mqtt::mosquitto_message>();
+  m_sptr->mid = message->mid;
+  m_sptr->qos = message->qos;
+  m_sptr->retain = message->retain;
+  m_sptr->topic = std::string(message->topic);
+  m_sptr->payloadlen = message->payloadlen;
+  m_sptr->payload = std::make_shared<char>(message->payloadlen);
+  memcpy(m_sptr->payload.get(), message->payload, message->payloadlen);
+  std::cout << "Received topic: " << m_sptr->topic << std::endl;
+  std::cout << "Received message: " << static_cast<char *>(m_sptr->payload.get()) << std::endl;
+  payLoad_.push_back(m_sptr);
+}
+int MosquittoIO::Subscribe(const std::string &topic, int qos) {
+  const int ret = HandleError(subscribe(NULL, topic.c_str(), qos));
+  if (ret == 0) {
+    topicSub_.push_back(topic);
+  }
+  return ret;
 }
 void MosquittoIO::on_subscribe(int mid, int qos_count, const int *granted_qos) {
-  std::cout << "Subscribed\ngranted_qos: " << *granted_qos << std::endl;
+  std::cout << "Subscribed" << "\ngranted_qos: " << *granted_qos << std::endl;
 }
 int MosquittoIO::HandleError(int error_code) {
   if (error_code != mosq_err_t::MOSQ_ERR_SUCCESS) {
