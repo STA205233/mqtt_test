@@ -26,10 +26,6 @@ int main(int argc, char **argv) {
       break;
     }
     std::string input = input_header + std::to_string(i);
-    if (input == "exit") {
-      std::cout << "Exiting..." << std::endl;
-      break;
-    }
     mosq.Publish(input, "test/test1");
     std::this_thread::sleep_for(std::chrono::seconds(1));
     i++;

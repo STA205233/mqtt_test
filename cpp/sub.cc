@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
   mosq.loop_start();
   while (true) {
     const auto &pay = mosq.getPayload();
-    if (i > 2) {
+    if (i > 10) {
       break;
     }
     for (const auto &p: pay) {

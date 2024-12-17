@@ -41,6 +41,7 @@ public:
   std::string getHost() const { return host_; }
   int getPort() const { return port_; }
   static int HandleError(int error_code);
+  int setVerbose(int verbose) { verbose_ = verbose; }
   void ClearPayload() { payLoad_.clear(); }
 
 private:
@@ -53,6 +54,7 @@ private:
 
   int port_;
   int keepAlive_;
+  int verbose_ = 0;
 };
 template <typename V>
 int MosquittoIO<V>::Publish(const V &message, const std::string &topic, int qos) {
@@ -61,7 +63,6 @@ int MosquittoIO<V>::Publish(const V &message, const std::string &topic, int qos)
 template <>
 int MosquittoIO<std::string>::Publish(const std::string &message, const std::string &topic, int qos) {
   std::cout << "Publishing message: " << message << std::endl;
-  std::cout << message.size() << std::endl;
   return HandleError(publish(NULL, topic.c_str(), strlen(message.c_str()), message.c_str(), qos));
 }
 template <typename V>
@@ -82,6 +83,9 @@ void MosquittoIO<V>::Connect() {
 }
 template <typename V>
 void MosquittoIO<V>::on_connect(int rc) {
+  if (verbose_ < 2) {
+    return;
+  }
   if (rc == 0) {
     std::cout << "Connected" << std::endl;
   }
@@ -91,6 +95,9 @@ void MosquittoIO<V>::on_connect(int rc) {
 }
 template <typename V>
 void MosquittoIO<V>::on_disconnect(int rc) {
+  if (verbose_ < 2) {
+    return;
+  }
   if (rc == 0) {
     std::cout << "Disconnected" << std::endl;
   }
@@ -100,6 +107,9 @@ void MosquittoIO<V>::on_disconnect(int rc) {
 }
 template <typename V>
 void MosquittoIO<V>::on_publish(int mid) {
+  if (verbose_ < 2) {
+    return;
+  }
   std::cout << "Published message with id: " << mid << std::endl;
 }
 template <typename V>
@@ -112,10 +122,13 @@ void MosquittoIO<V>::on_message(const struct mosquitto_message *message) {
   m_sptr->payloadlen = message->payloadlen;
   std::string temp = *static_cast<V *>(message->payload);
   m_sptr->payload = std::make_shared<V>(temp);
+  payLoad_.push_back(m_sptr);
+  if (verbose_ < 3) {
+    return;
+  }
   std::cout << "Received topic: " << m_sptr->topic << std::endl;
   std::cout << "Received message: " << *m_sptr->payload << std::endl;
   std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
-  payLoad_.push_back(m_sptr);
 }
 template <>
 void MosquittoIO<std::string>::on_message(const struct mosquitto_message *message) {
@@ -127,10 +140,13 @@ void MosquittoIO<std::string>::on_message(const struct mosquitto_message *messag
   m_sptr->payloadlen = message->payloadlen;
   std::string temp(static_cast<char *>(message->payload));
   m_sptr->payload = std::make_shared<std::string>(temp);
+  payLoad_.push_back(m_sptr);
+  if (verbose_ < 3) {
+    return;
+  }
   std::cout << "Received topic: " << m_sptr->topic << std::endl;
   std::cout << "Received message: " << *m_sptr->payload << std::endl;
   std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
-  payLoad_.push_back(m_sptr);
 }
 template <typename V>
 int MosquittoIO<V>::Subscribe(const std::string &topic, int qos) {
@@ -142,6 +158,9 @@ int MosquittoIO<V>::Subscribe(const std::string &topic, int qos) {
 }
 template <typename V>
 void MosquittoIO<V>::on_subscribe(int mid, int qos_count, const int *granted_qos) {
+  if (verbose_ < 2) {
+    return;
+  }
   std::cout << "Subscribed" << "\ngranted_qos: " << *granted_qos << std::endl;
 }
 template <typename V>
