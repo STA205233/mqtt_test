@@ -19,7 +19,6 @@ int main(int argc, char **argv) {
     mosq.username_pw_set(username.c_str(), password.c_str());
   }
   mosq.Connect();
-  mosq.loop_start();
   std::string input_header = "This is MQTT test. No.";
   while (true) {
     if (i > 10) {
@@ -27,10 +26,9 @@ int main(int argc, char **argv) {
     }
     std::string input = input_header + std::to_string(i);
     mosq.Publish(input, "test/test1");
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
     i++;
+    mosq.loop();
   }
-  MosquittoIO<std::string>::HandleError(mosq.loop_stop(true));
-
   return 0;
 }

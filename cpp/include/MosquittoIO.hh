@@ -22,7 +22,7 @@ template <typename V>
 class MosquittoIO: public mosqpp::mosquittopp {
 public:
   MosquittoIO(const char *id, const std::string &host, int port) : mosquittopp(id) {
-    HandleError(mosqpp::lib_init());
+    HandleError(threaded_set(true));
     host_ = host;
     port_ = port;
     keepAlive_ = 60;
