@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
   std::string host = argv[1];
   int port = std::atoi(argv[2]);
   int i = 0;
-  MosquittoIO<std::string> mosq("test_sub", host, port);
+  MosquittoIO<std::vector<uint8_t>> mosq("test_sub", host, port);
   if (argc == 5) {
     std::string username = argv[3];
     std::string password = argv[4];
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
       if (p->payloadlen == 0) {
         continue;
       }
-      std::cout << "Received message: " << *p->payload << std::endl;
+      std::cout << "Received message: " << static_cast<int>((*p->payload)[0]) << std::endl;
       std::cout << "qos: " << p->qos << std::endl;
       i++;
     }
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     if (p->payloadlen == 0) {
       continue;
     }
-    std::cout << "Received message: " << *p->payload << std::endl;
+    std::cout << "Received message: " << static_cast<int>((*p->payload)[0]) << std::endl;
     std::cout << "qos: " << p->qos << std::endl;
   }
   i++;
