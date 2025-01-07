@@ -8,13 +8,13 @@
 
 namespace gramsballoon::pgrams {
 namespace mqtt {
-template <typename V>
+template <typename V = std::string>
 struct mosquitto_message {
   int mid;
   int qos;
   bool retain;
   std::string topic;
-  std::shared_ptr<V> payload;
+  V payload;
   int payloadlen;
 };
 } // namespace mqtt
@@ -41,7 +41,7 @@ public:
   std::string getHost() const { return host_; }
   int getPort() const { return port_; }
   static int HandleError(int error_code);
-  int setVerbose(int verbose) { verbose_ = verbose; }
+  void setVerbose(int verbose) { verbose_ = verbose; }
   void ClearPayload() { payLoad_.clear(); }
 
 private:
@@ -63,7 +63,27 @@ int MosquittoIO<V>::Publish(const V &message, const std::string &topic, int qos)
 template <>
 int MosquittoIO<std::string>::Publish(const std::string &message, const std::string &topic, int qos) {
   std::cout << "Publishing message: " << message << std::endl;
-  return HandleError(publish(NULL, topic.c_str(), strlen(message.c_str()), message.c_str(), qos));
+  std::cout << "length: " << message.length() << std::endl;
+  std::cout << "strlen(message_str.c_str()): " << strlen(message.c_str()) << std::endl;
+  return HandleError(publish(NULL, topic.c_str(), strlen(message.c_str()) + 1, message.c_str(), qos));
+}
+template <>
+int MosquittoIO<std::vector<uint8_t>>::Publish(const std::vector<uint8_t> &message, const std::string &topic, int qos) {
+  std::string message_str;
+  for (const auto &m: message) {
+    message_str += std::to_string(static_cast<int>(m)) + ",";
+  }
+  if (verbose_ > 1) {
+    std::cout << "Publishing message: " << message_str << std::endl;
+  }
+  if (verbose_ > 2) {
+    std::cout << "Publishing message in int: ";
+    for (size_t i = 0; i < message.size(); i++) {
+      std::cout << static_cast<int>(message[i]) << " ";
+    };
+    std::cout << std::endl;
+  }
+  return HandleError(publish(NULL, topic.c_str(), strlen(message_str.c_str()), message_str.c_str(), qos));
 }
 template <typename V>
 int MosquittoIO<V>::Publish(const std::vector<V> &message, const std::string &topic, int qos) {
@@ -139,31 +159,40 @@ void MosquittoIO<std::string>::on_message(const struct mosquitto_message *messag
   m_sptr->topic = std::string(message->topic);
   m_sptr->payloadlen = message->payloadlen;
   std::string temp(static_cast<char *>(message->payload));
-  m_sptr->payload = std::make_shared<std::string>(temp);
+  m_sptr->payload = std::string(temp);
   payLoad_.push_back(m_sptr);
   if (verbose_ < 3) {
     return;
   }
   std::cout << "Received topic: " << m_sptr->topic << std::endl;
-  std::cout << "Received message: " << *m_sptr->payload << std::endl;
+  std::cout << "Received message: " << m_sptr->payload << std::endl;
   std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
 }
-template <typename V>
-void MosquittoIO<std::vector<V>>::on_message(const struct mosquitto_message *message) {
-  std::shared_ptr<mqtt::mosquitto_message<V>> m_sptr = std::make_shared<mqtt::mosquitto_message<std::vector<V>>>();
+template <>
+void MosquittoIO<std::vector<uint8_t>>::on_message(const struct mosquitto_message *message) {
+  auto m_sptr = std::make_shared<mqtt::mosquitto_message<std::vector<uint8_t>>>();
   m_sptr->mid = message->mid;
   m_sptr->qos = message->qos;
   m_sptr->retain = message->retain;
   m_sptr->topic = std::string(message->topic);
-  m_sptr->payloadlen = message->payloadlen;
-  V temp = *static_cast<V *>(message->payload);
-  m_sptr->payload = std::make_shared<std::vector<V>>(temp);
+  std::string value(static_cast<char *>(message->payload));
+  std::string value_str;
+  m_sptr->payloadlen = 0;
+  for (size_t i = 0; i < value.size(); i++) {
+    if (value[i] == ',') {
+      m_sptr->payload.push_back(std::stoi(value_str));
+      value_str.clear();
+      m_sptr->payloadlen++;
+      continue;
+    }
+    value_str += value[i];
+  }
   payLoad_.push_back(m_sptr);
   if (verbose_ < 3) {
     return;
   }
   std::cout << "Received topic: " << m_sptr->topic << std::endl;
-  std::cout << "Received message: " << static_cast<int>((*m_sptr->payload)[0]) << std::endl;
+  std::cout << "Received message: " << static_cast<int>((m_sptr->payload)[0]) << std::endl;
   std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
 }
 template <typename V>
@@ -175,7 +204,7 @@ int MosquittoIO<V>::Subscribe(const std::string &topic, int qos) {
   return ret;
 }
 template <typename V>
-void MosquittoIO<V>::on_subscribe(int mid, int qos_count, const int *granted_qos) {
+void MosquittoIO<V>::on_subscribe(int, int, const int *granted_qos) {
   if (verbose_ < 2) {
     return;
   }

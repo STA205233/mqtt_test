@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
   std::string host = argv[1];
   int port = std::atoi(argv[2]);
   int i = 0;
-  MosquittoIO<std::vector<uint8_t>> mosq("test_pub", host, port);
+  MosquittoIO<std::string> mosq("test_pub", host, port);
   if (argc == 5) {
     std::string username = argv[3];
     std::string password = argv[4];
@@ -21,12 +21,11 @@ int main(int argc, char **argv) {
   mosq.Connect();
   mosq.setVerbose(4);
   std::string input_header = "This is MQTT test. No.";
-  std::vector<uint8_t> input;
   while (true) {
     if (i > 10) {
       break;
     }
-    input.push_back(i);
+    std::string input = std::string(input_header + std::to_string(i));
     mosq.Publish(input, "test/test1");
     std::this_thread::sleep_for(std::chrono::microseconds(100));
     i++;
