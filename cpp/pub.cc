@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     }
     input.push_back(i);
     mosq.Publish(input, "test/test1");
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     i++;
     mosq.loop();
   }
