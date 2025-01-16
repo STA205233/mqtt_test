@@ -33,9 +33,11 @@ int main(int argc, char **argv) {
       if (p->payloadlen == 0) {
         continue;
       }
+      std::cout << "Received message: ";
       for (const auto &m: p->payload) {
-        std::cout << "Received message last: " << static_cast<int>(m) << " " << std::endl;
+        std::cout << static_cast<int>(m) << " ";
       }
+      std::cout << std::endl;
       std::cout << "qos: " << p->qos << std::endl;
       i++;
     }
