@@ -1,9 +1,10 @@
 #ifndef GB_MosquittoIO_hh
 #define GB_MosquittoIO_hh 1
 #include "mosquittopp.h"
+#include <deque>
 #include <iostream>
+#include <stdint.h>
 #include <string>
-#include <variant>
 #include <vector>
 
 namespace gramsballoon::pgrams {
@@ -21,14 +22,16 @@ struct mosquitto_message {
 template <typename V>
 class MosquittoIO: public mosqpp::mosquittopp {
 public:
-  MosquittoIO(const char *id, const std::string &host, int port) : mosquittopp(id) {
-    HandleError(threaded_set(true));
+  MosquittoIO(const char *id, const std::string &host, int port, int keepAlive = 60, bool threadedset = true) : mosquittopp(id) {
+    if (threadedset)
+      HandleError(threaded_set(true));
     host_ = host;
     port_ = port;
-    keepAlive_ = 60;
+    keepAlive_ = keepAlive;
   }
   virtual ~MosquittoIO();
-  void Connect();
+  int Connect();
+  int Disconnect();
   int Publish(const V &message, const std::string &topic, int qos = 0);
   int Publish(const std::vector<V> &message, const std::string &topic, int qos = 0);
   int Subscribe(const std::string &topic, int qos = 0);
@@ -37,7 +40,8 @@ public:
   void on_publish(int mid) override;
   void on_message(const struct mosquitto_message *message) override;
   void on_subscribe(int mid, int qos_count, const int *granted_qos) override;
-  const std::vector<std::shared_ptr<mqtt::mosquitto_message<V>>> &getPayload() const { return payLoad_; }
+  const std::deque<std::shared_ptr<mqtt::mosquitto_message<V>>> &getPayload() const { return payLoad_; }
+  void popPayloadFront() { payLoad_.pop_front(); }
   std::string getHost() const { return host_; }
   int getPort() const { return port_; }
   static int HandleError(int error_code);
@@ -48,43 +52,19 @@ private:
   using mosqpp::mosquittopp::connect;
   using mosqpp::mosquittopp::disconnect;
   using mosqpp::mosquittopp::publish;
-  std::vector<std::shared_ptr<mqtt::mosquitto_message<V>>> payLoad_;
+  std::deque<std::shared_ptr<mqtt::mosquitto_message<V>>> payLoad_;
   std::string host_;
   std::vector<std::string> topicSub_;
-
   int port_;
   int keepAlive_;
   int verbose_ = 0;
+  bool connected_ = false;
 };
 template <typename V>
 int MosquittoIO<V>::Publish(const V &message, const std::string &topic, int qos) {
   return HandleError(publish(NULL, topic.c_str(), sizeof(V), &message, qos));
 }
-template <>
-int MosquittoIO<std::string>::Publish(const std::string &message, const std::string &topic, int qos) {
-  std::cout << "Publishing message: " << message << std::endl;
-  std::cout << "length: " << message.length() << std::endl;
-  std::cout << "strlen(message_str.c_str()): " << strlen(message.c_str()) << std::endl;
-  return HandleError(publish(NULL, topic.c_str(), strlen(message.c_str()) + 1, message.c_str(), qos));
-}
-template <>
-int MosquittoIO<std::vector<uint8_t>>::Publish(const std::vector<uint8_t> &message, const std::string &topic, int qos) {
-  std::string message_str;
-  for (const auto &m: message) {
-    message_str += std::to_string(static_cast<int>(m)) + ",";
-  }
-  if (verbose_ > 1) {
-    std::cout << "Publishing message: " << message_str << std::endl;
-  }
-  if (verbose_ > 2) {
-    std::cout << "Publishing message in int: ";
-    for (size_t i = 0; i < message.size(); i++) {
-      std::cout << static_cast<int>(message[i]) << " ";
-    };
-    std::cout << std::endl;
-  }
-  return HandleError(publish(NULL, topic.c_str(), strlen(message_str.c_str()), message_str.c_str(), qos));
-}
+
 template <typename V>
 int MosquittoIO<V>::Publish(const std::vector<V> &message, const std::string &topic, int qos) {
   int ret = 0;
@@ -92,14 +72,36 @@ int MosquittoIO<V>::Publish(const std::vector<V> &message, const std::string &to
     ret &= Publish(m, topic, qos);
   };
 }
+template <>
+int MosquittoIO<std::string>::Publish(const std::string &message, const std::string &topic, int qos);
+template <>
+int MosquittoIO<std::vector<uint8_t>>::Publish(const std::vector<uint8_t> &message, const std::string &topic, int qos);
 template <typename V>
 MosquittoIO<V>::~MosquittoIO() {
-  HandleError(disconnect());
+  HandleError(Disconnect());
   HandleError(mosqpp::lib_cleanup());
 }
 template <typename V>
-void MosquittoIO<V>::Connect() {
-  HandleError(connect(host_.c_str(), port_, keepAlive_));
+int MosquittoIO<V>::Connect() {
+  if (connected_) {
+    return 0;
+  }
+  const int ret = HandleError(connect(host_.c_str(), port_, keepAlive_));
+  if (ret == 0) {
+    connected_ = true;
+  }
+  return ret;
+}
+template <typename V>
+int MosquittoIO<V>::Disconnect() {
+  if (!connected_) {
+    return 0;
+  }
+  const int ret = HandleError(disconnect());
+  if (ret == 0) {
+    connected_ = false;
+  }
+  return ret;
 }
 template <typename V>
 void MosquittoIO<V>::on_connect(int rc) {
@@ -122,7 +124,7 @@ void MosquittoIO<V>::on_disconnect(int rc) {
     std::cout << "Disconnected" << std::endl;
   }
   else {
-    std::cout << "Disconnection failed: error code" << mosqpp::strerror(rc) << std::endl;
+    std::cout << "Disconnection failed: error code " << mosqpp::strerror(rc) << std::endl;
   }
 }
 template <typename V>
@@ -133,33 +135,15 @@ void MosquittoIO<V>::on_publish(int mid) {
   std::cout << "Published message with id: " << mid << std::endl;
 }
 template <typename V>
-void MosquittoIO<V>::on_message(const struct mosquitto_message *message) {
-  std::shared_ptr<mqtt::mosquitto_message<V>> m_sptr = std::make_shared<mqtt::mosquitto_message<V>>();
+void MosquittoIO<V>::on_message(const mosquitto_message *message) {
+  auto m_sptr = std::make_shared<mqtt::mosquitto_message<V>>();
   m_sptr->mid = message->mid;
   m_sptr->qos = message->qos;
   m_sptr->retain = message->retain;
   m_sptr->topic = std::string(message->topic);
   m_sptr->payloadlen = message->payloadlen;
   V temp = *static_cast<V *>(message->payload);
-  m_sptr->payload = std::make_shared<V>(temp);
-  payLoad_.push_back(m_sptr);
-  if (verbose_ < 3) {
-    return;
-  }
-  std::cout << "Received topic: " << m_sptr->topic << std::endl;
-  std::cout << "Received message: " << *m_sptr->payload << std::endl;
-  std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
-}
-template <>
-void MosquittoIO<std::string>::on_message(const struct mosquitto_message *message) {
-  std::shared_ptr<mqtt::mosquitto_message<std::string>> m_sptr = std::make_shared<mqtt::mosquitto_message<std::string>>();
-  m_sptr->mid = message->mid;
-  m_sptr->qos = message->qos;
-  m_sptr->retain = message->retain;
-  m_sptr->topic = std::string(message->topic);
-  m_sptr->payloadlen = message->payloadlen;
-  std::string temp(static_cast<char *>(message->payload));
-  m_sptr->payload = std::string(temp);
+  m_sptr->payload = static_cast<V>(temp);
   payLoad_.push_back(m_sptr);
   if (verbose_ < 3) {
     return;
@@ -169,32 +153,9 @@ void MosquittoIO<std::string>::on_message(const struct mosquitto_message *messag
   std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
 }
 template <>
-void MosquittoIO<std::vector<uint8_t>>::on_message(const struct mosquitto_message *message) {
-  auto m_sptr = std::make_shared<mqtt::mosquitto_message<std::vector<uint8_t>>>();
-  m_sptr->mid = message->mid;
-  m_sptr->qos = message->qos;
-  m_sptr->retain = message->retain;
-  m_sptr->topic = std::string(message->topic);
-  std::string value(static_cast<char *>(message->payload));
-  std::string value_str;
-  m_sptr->payloadlen = 0;
-  for (size_t i = 0; i < value.size(); i++) {
-    if (value[i] == ',') {
-      m_sptr->payload.push_back(std::stoi(value_str));
-      value_str.clear();
-      m_sptr->payloadlen++;
-      continue;
-    }
-    value_str += value[i];
-  }
-  payLoad_.push_back(m_sptr);
-  if (verbose_ < 3) {
-    return;
-  }
-  std::cout << "Received topic: " << m_sptr->topic << std::endl;
-  std::cout << "Received message: " << static_cast<int>((m_sptr->payload)[0]) << std::endl;
-  std::cout << "Received length: " << m_sptr->payloadlen << std::endl;
-}
+void MosquittoIO<std::string>::on_message(const mosquitto_message *message);
+template <>
+void MosquittoIO<std::vector<uint8_t>>::on_message(const mosquitto_message *message);
 template <typename V>
 int MosquittoIO<V>::Subscribe(const std::string &topic, int qos) {
   const int ret = HandleError(subscribe(NULL, topic.c_str(), qos));

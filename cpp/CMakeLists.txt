@@ -1,9 +1,9 @@
 
 set(PROG_NAME mqtt_test)
-add_executable(${PROG_NAME}_pub pub.cc)
-add_executable(${PROG_NAME}_pub_str pub_str.cc)
-add_executable(${PROG_NAME}_sub sub.cc)
-add_executable(${PROG_NAME}_sub_str sub_str.cc)
+add_executable(${PROG_NAME}_pub pub.cc src/MosquittoIO.cc)
+add_executable(${PROG_NAME}_pub_str pub_str.cc src/MosquittoIO.cc)
+add_executable(${PROG_NAME}_sub sub.cc src/MosquittoIO.cc)
+add_executable(${PROG_NAME}_sub_str sub_str.cc src/MosquittoIO.cc)
 target_include_directories(${PROG_NAME}_pub PUBLIC include)
 target_include_directories(${PROG_NAME}_pub_str PUBLIC include)
 target_include_directories(${PROG_NAME}_sub PUBLIC include)
